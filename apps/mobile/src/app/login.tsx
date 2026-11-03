@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  type SignInMethods,
   TOTP_CODE_LENGTH,
   TWO_FACTOR_CLIENT_HEADER,
   twoFactorErrorMessage,
@@ -34,6 +35,27 @@ export default function LoginScreen() {
   // Set after the password when the account uses two-factor.
   const [codeStep, setCodeStep] = useState<"totp" | "backup" | null>(null);
   const [code, setCode] = useState("");
+  const methods = useSignInMethods(serverUrl);
+
+  async function onSso(provider: string) {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      // Opens the provider in an auth browser session; the server returns
+      // the session to the app's deep link.
+      const { error } = await authClient.signIn.social({ provider, callbackURL: "/" });
+      if (error) {
+        setError(error.message ?? "Single sign-on failed");
+        return;
+      }
+      await session.refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Single sign-on failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function onSubmit() {
     if (submitting) return;
@@ -131,6 +153,33 @@ export default function LoginScreen() {
               </Text>
             </View>
 
+            {!codeStep && methods.sso ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={submitting}
+                onPress={() => void onSso(methods.sso!.provider)}
+                style={({ pressed }) => [
+                  styles.cta,
+                  methods.password
+                    ? { borderWidth: 1, borderColor: colors.input }
+                    : { backgroundColor: colors.primary },
+                  { borderRadius: radii.md, opacity: pressed || submitting ? 0.85 : 1 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.ctaText,
+                    {
+                      color: methods.password ? colors.foreground : colors.primaryForeground,
+                      fontFamily: fonts.sansSemiBold,
+                    },
+                  ]}
+                >
+                  Continue with {methods.sso.name}
+                </Text>
+              </Pressable>
+            ) : null}
+
             {codeStep ? (
               <View style={styles.field}>
                 <Text
@@ -165,7 +214,7 @@ export default function LoginScreen() {
                   ]}
                 />
               </View>
-            ) : (
+            ) : methods.password ? (
               <View style={styles.fields}>
                 <View style={styles.field}>
                   <Text
@@ -221,8 +270,7 @@ export default function LoginScreen() {
                   />
                 </View>
               </View>
-
-            )}
+            ) : null}
 
             {error !== "" && (
               <Text
@@ -232,34 +280,36 @@ export default function LoginScreen() {
               </Text>
             )}
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={submitting}
-              onPress={codeStep ? onVerify : onSubmit}
-              style={({ pressed }) => [
-                styles.cta,
-                {
-                  backgroundColor: colors.primary,
-                  borderRadius: radii.md,
-                  opacity: pressed || submitting ? 0.85 : 1,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.ctaText,
-                  { color: colors.primaryForeground, fontFamily: fonts.sansSemiBold },
+            {codeStep || methods.password ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={submitting}
+                onPress={codeStep ? onVerify : onSubmit}
+                style={({ pressed }) => [
+                  styles.cta,
+                  {
+                    backgroundColor: colors.primary,
+                    borderRadius: radii.md,
+                    opacity: pressed || submitting ? 0.85 : 1,
+                  },
                 ]}
               >
-                {codeStep
-                  ? submitting
-                    ? "Verifying…"
-                    : "Verify"
-                  : submitting
-                    ? "Signing in…"
-                    : "Sign in"}
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.ctaText,
+                    { color: colors.primaryForeground, fontFamily: fonts.sansSemiBold },
+                  ]}
+                >
+                  {codeStep
+                    ? submitting
+                      ? "Verifying…"
+                      : "Verify"
+                    : submitting
+                      ? "Signing in…"
+                      : "Sign in"}
+                </Text>
+              </Pressable>
+            ) : null}
 
             {codeStep ? (
               <Pressable
@@ -278,7 +328,7 @@ export default function LoginScreen() {
                   {codeStep === "backup" ? "Use your authenticator app" : "Use a backup code"}
                 </Text>
               </Pressable>
-            ) : (
+            ) : methods.password ? (
               <Pressable
                 accessibilityRole="button"
                 hitSlop={8}
@@ -294,8 +344,7 @@ export default function LoginScreen() {
                   Forgot password?
                 </Text>
               </Pressable>
-
-            )}
+            ) : null}
 
             {serverHost ? (
               <View style={styles.serverRow}>
@@ -356,6 +405,27 @@ const styles = StyleSheet.create({
   serverText: { flex: 1, fontSize: 13 },
   serverLinkText: { fontSize: 13 },
 });
+
+const PASSWORD_ONLY: SignInMethods = { password: true, sso: null };
+
+/** How the server signs users in. Servers from before single sign-on offer passwords only. */
+function useSignInMethods(serverUrl: string | null): SignInMethods {
+  const [methods, setMethods] = useState<SignInMethods>(PASSWORD_ONLY);
+  useEffect(() => {
+    setMethods(PASSWORD_ONLY);
+    if (!serverUrl) return;
+    let current = true;
+    fetch(new URL("/api/sign-in-methods", serverUrl).toString(), { credentials: "omit" })
+      .then(async (response) => {
+        if (current && response.ok) setMethods((await response.json()) as SignInMethods);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [serverUrl]);
+  return methods;
+}
 
 function safeHost(url: string) {
   try {

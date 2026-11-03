@@ -1,6 +1,10 @@
 "use client";
 
-import { TWO_FACTOR_CLIENT_HEADER } from "@overtchat/shared";
+import {
+  ssoErrorMessage,
+  TWO_FACTOR_CLIENT_HEADER,
+  type SignInMethods,
+} from "@overtchat/shared";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,15 +12,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth/client";
+import { desktopBridge } from "@/lib/desktop";
 import { useResetAuthState } from "@/lib/queries/auth";
 import { TwoFactorCodeForm } from "./TwoFactorCodeForm";
 
-export function LoginForm() {
+export function LoginForm({
+  methods,
+  ssoError,
+}: {
+  methods: SignInMethods;
+  /** The `error` code single sign-on returned with. */
+  ssoError?: string;
+}) {
   const navigate = useNavigate();
   const resetAuthState = useResetAuthState();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    ssoError ? ssoErrorMessage(ssoError) : "",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [needsCode, setNeedsCode] = useState(false);
@@ -24,6 +38,39 @@ export function LoginForm() {
   async function finish() {
     resetAuthState();
     await navigate({ to: "/", replace: true });
+  }
+
+  async function signInWithSso(provider: string) {
+    setSubmitting(true);
+    setError("");
+    const desktop = desktopBridge();
+    if (desktop) {
+      // The bundled UI is on another origin than the server, so the desktop
+      // app runs the provider's pages in its own window.
+      if (!desktop.signInWithSso) {
+        setError("Update the OvertChat app to use single sign-on.");
+        setSubmitting(false);
+        return;
+      }
+      const result = await desktop.signInWithSso(provider);
+      if (result.ok) {
+        await finish();
+        return;
+      }
+      if (result.error) setError(ssoErrorMessage(result.error));
+      setSubmitting(false);
+      return;
+    }
+    // Leaves the app for the provider, which returns to `callbackURL`.
+    const { error } = await authClient.signIn.social({
+      provider,
+      callbackURL: "/",
+      errorCallbackURL: "/login",
+    });
+    if (error) {
+      setError(error.message ?? "Single sign-on failed");
+      setSubmitting(false);
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -60,8 +107,9 @@ export function LoginForm() {
     );
   }
 
+  const sso = methods.sso;
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
+    <div className="space-y-5">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">
           Welcome back
@@ -71,58 +119,86 @@ export function LoginForm() {
         </p>
       </header>
 
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
-          <PasswordInput
-            id="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-      </div>
+      {sso && (
+        <Button
+          type="button"
+          variant={methods.password ? "outline" : "default"}
+          disabled={submitting}
+          className="w-full"
+          onClick={() => void signInWithSso(sso.provider)}
+        >
+          Continue with {sso.name}
+        </Button>
+      )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Signing in…" : "Sign in"}
-      </Button>
-      <Button
-        type="button"
-        variant="link"
-        className="w-full"
-        aria-expanded={showRecovery}
-        aria-controls="password-recovery-help"
-        onClick={() => setShowRecovery((shown) => !shown)}
-      >
-        Forgot password?
-      </Button>
-      {showRecovery && (
-        <div id="password-recovery-help" className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            Contact your server administrator to reset your password. Another
-            administrator can also help if you are an admin.
-          </p>
-          <p>
-            If all administrators are locked out, the server owner can run{" "}
-            <code>overtchat reset-password</code> on the server, or{" "}
-            <code>overtchat reset-two-factor</code> for a lost authenticator.
-          </p>
+      {sso && methods.password && (
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
         </div>
       )}
-    </form>
+
+      {!methods.password && error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
+
+      {methods.password && (
+        <form onSubmit={onSubmit} className="space-y-5">
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <PasswordInput
+                id="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <Button type="submit" disabled={submitting} className="w-full">
+            {submitting ? "Signing in…" : "Sign in"}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            className="w-full"
+            aria-expanded={showRecovery}
+            aria-controls="password-recovery-help"
+            onClick={() => setShowRecovery((shown) => !shown)}
+          >
+            Forgot password?
+          </Button>
+          {showRecovery && (
+            <div id="password-recovery-help" className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                Contact your server administrator to reset your password. Another
+                administrator can also help if you are an admin.
+              </p>
+              <p>
+                If all administrators are locked out, the server owner can run{" "}
+                <code>overtchat reset-password</code> on the server, or{" "}
+                <code>overtchat reset-two-factor</code> for a lost authenticator.
+              </p>
+            </div>
+          )}
+        </form>
+      )}
+    </div>
   );
 }

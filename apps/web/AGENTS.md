@@ -63,6 +63,15 @@ atomically consumes setup authorization. Public signup cannot bypass this;
 administrators create subsequent users through Better Auth's admin path.
 See [initial setup](../../docs/deploy.md#install).
 
+`OVERTCHAT_OIDC_*` replaces both with one OpenID Connect provider
+(`lib/auth/oidc-config.ts`, `lib/auth/oidc.ts`). Its callback is the only path
+that creates accounts then, and the setup code stays closed. Roles come from
+the provider's groups or, without admin groups, the first account becomes the
+administrator in one transaction. Password sign-in and admin-created users are
+off unless `OVERTCHAT_OIDC_PASSWORD_LOGIN` is set; clients read the available
+methods from `/api/sign-in-methods`. See
+[single sign-on](../../docs/deploy.md#single-sign-on).
+
 ## Chat and persistence
 
 `lib/chat/run.ts` is the shared streaming orchestration boundary for text and

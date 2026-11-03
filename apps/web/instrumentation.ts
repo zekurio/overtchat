@@ -4,6 +4,13 @@ export async function register() {
   const { runMigrations } = await import("@/lib/db/migrate");
   runMigrations();
 
+  // Fails startup on an incomplete single sign-on configuration.
+  const { oidcConfig } = await import("@/lib/auth/oidc-config");
+  const oidc = oidcConfig();
+  if (oidc) {
+    console.log(`[auth] Single sign-on through ${oidc.issuer}; initial setup is skipped.`);
+  }
+
   const { getSetupCode } = await import("@/lib/db/initialSetup");
   const code = getSetupCode();
   if (code) {

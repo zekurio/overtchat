@@ -416,6 +416,76 @@ administrators set up two-factor before they can use the app, and keeps them
 from turning it off. Other users can still choose. Two-factor sign-in needs the
 current web, desktop, and mobile apps; older apps ask the user to update.
 
+## Single sign-on
+
+OvertChat can sign users in through one OpenID Connect provider, such as
+Authentik, Authelia, Keycloak, Kanidm, or Pocket ID. The provider creates
+accounts: a user's first sign-in makes their OvertChat account, so the server
+has no setup code, no first-account form, and no welcome checklist. Password
+sign-in is off unless you turn it back on.
+
+Register OvertChat with the provider as a web application with this redirect
+URI, where the address is `BETTER_AUTH_URL`:
+
+```text
+https://chat.example.com/api/auth/callback/oidc
+```
+
+Then set these in the app's environment and restart it. Only the issuer and the
+client ID are required.
+
+| Variable | Purpose |
+| --- | --- |
+| `OVERTCHAT_OIDC_ISSUER` | Issuer URL. OvertChat reads `<issuer>/.well-known/openid-configuration`. |
+| `OVERTCHAT_OIDC_CLIENT_ID` | Client ID. |
+| `OVERTCHAT_OIDC_CLIENT_SECRET` | Client secret. Leave it unset for a public client; sign-in always uses PKCE. |
+| `OVERTCHAT_OIDC_NAME` | Sign-in button label, as in "Continue with Authentik". Default `SSO`. |
+| `OVERTCHAT_OIDC_SCOPES` | Scopes, separated by spaces or commas. Default `openid profile email`. |
+| `OVERTCHAT_OIDC_ADMIN_GROUPS` | Comma-separated groups whose members are administrators. |
+| `OVERTCHAT_OIDC_GROUPS_CLAIM` | Claim that lists a user's groups. Default `groups`. A dotted path such as `realm_access.roles` reads a nested claim. |
+| `OVERTCHAT_OIDC_PASSWORD_LOGIN` | `true` keeps password sign-in next to single sign-on. Default `false`. |
+
+The app refuses to start when some `OVERTCHAT_OIDC_*` variables are set but the
+issuer or client ID is missing. That way a typo can't open the setup-code flow
+on a server meant to use single sign-on. The log shows
+`[auth] Single sign-on through …` when it is on.
+
+Roles come from one of two places:
+
+- With `OVERTCHAT_OIDC_ADMIN_GROUPS`, the provider decides. Every sign-in
+  makes members of those groups administrators and everyone else a user, so
+  removing someone from the group demotes them the next time they sign in.
+  **Settings → Users** shows roles but doesn't change them. Many providers only
+  send groups when asked, so add the provider's groups scope, often `groups`,
+  to `OVERTCHAT_OIDC_SCOPES`. OvertChat reads groups from the ID token and the
+  userinfo response.
+- Without it, the first account becomes the administrator and later accounts
+  are users. Administrators change roles in **Settings → Users**.
+
+Anyone the provider lets sign in to this client gets an account, so limit
+access to the application in the provider.
+
+An account that already exists, with a password from before, joins the
+provider's sign-in when the provider reports the same email as verified. The
+account keeps its chats and settings. If the provider doesn't verify the email,
+sign-in stops with a message instead of creating a second account.
+
+With password sign-in off, OvertChat has no passwords or two-factor of its own:
+**Settings → Security** points users to the provider, administrators can't add
+users or reset passwords, and `OVERTCHAT_REQUIRE_ADMIN_TWO_FACTOR` has no
+effect. Set up two-factor in the provider. Signing out of OvertChat leaves the
+provider's session alone.
+
+The web app, the desktop app, and the mobile app all show the provider's
+button. The desktop app opens the provider in its own window; the mobile app
+uses the system's sign-in browser. Both need a provider served over HTTPS.
+Older apps show the password form only, so update them before you turn off
+password sign-in.
+
+The management CLI doesn't configure single sign-on yet, and `overtchat
+setup` rewrites the app's `.env`. Use it with source Compose, Minimal Compose,
+or another deployment where you control the app's environment.
+
 ## Choose how to access OvertChat
 
 First-time installation and `overtchat setup` use the same access question.

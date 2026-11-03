@@ -65,4 +65,10 @@ export interface DesktopBridge {
   revealWindow?(): Promise<void>;
   /** Seconds since the user last touched the computer. */
   getSystemIdleSeconds?(): Promise<number>;
+  /**
+   * Signs in through the server's single sign-on provider in a window of its
+   * own and keeps the session. `error` is the provider's error code; it is
+   * absent when the user closed the window. Absent in older apps.
+   */
+  signInWithSso?(provider: string): Promise<{ ok: boolean; error?: string }>;
 }

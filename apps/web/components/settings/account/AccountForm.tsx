@@ -1,9 +1,11 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth/client";
+import { signInMethodsQuery } from "@/lib/queries/auth";
 import {
   SettingsActions,
   SettingsNotice,
@@ -22,6 +24,7 @@ export function AccountForm({
   /** Opens two-factor setup right away, as when coming from the sign-in prompt. */
   startTwoFactorSetup?: boolean;
 }) {
+  const { data: methods } = useQuery(signInMethodsQuery);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [pwError, setPwError] = useState("");
@@ -46,6 +49,27 @@ export function AccountForm({
     setPwStatus("ok");
     setCurrentPassword("");
     setNewPassword("");
+  }
+
+  if (methods && !methods.password) {
+    // Single sign-on accounts have no password here, and the provider
+    // handles their second factor.
+    return (
+      <SettingsPage>
+        <SettingsPageHeader
+          title="Security"
+          description={
+            <>
+              Signed in as <span className="text-foreground">{email}</span>.
+            </>
+          }
+        />
+        <SettingsNotice>
+          You sign in with {methods.sso?.name ?? "single sign-on"}. Manage
+          your password and two-factor authentication there.
+        </SettingsNotice>
+      </SettingsPage>
+    );
   }
 
   return (

@@ -16,6 +16,7 @@ import {
 } from "@/lib/queries/mcpServers";
 import { adminModelConfigsQuery } from "@/lib/queries/modelConfigs";
 import { serverCapabilitiesQuery } from "@/lib/queries/serverCapabilities";
+import { signInMethodsQuery } from "@/lib/queries/auth";
 import { usersQuery } from "@/lib/queries/users";
 import { withPages } from "@/spa/lazy";
 import { SettingsPending } from "@/spa/pending";
@@ -118,6 +119,8 @@ export const accountSettingsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { setup?: string } => ({
     setup: optionalString(search.setup),
   }),
+  loader: ({ context }) =>
+    context.queryClient.ensureQueryData(signInMethodsQuery),
   component: withPages(
     function AccountPage() {
       const { session } = accountSettingsRoute.useRouteContext();
@@ -315,7 +318,11 @@ export const usersSettingsRoute = createRoute({
   ...settingsPage,
   path: "users",
   beforeLoad: requireAdmin,
-  loader: ({ context }) => context.queryClient.ensureQueryData(usersQuery),
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(usersQuery),
+      context.queryClient.ensureQueryData(signInMethodsQuery),
+    ]),
   component: withPages(
     function UsersPage() {
       const { session } = usersSettingsRoute.useRouteContext();

@@ -179,6 +179,33 @@ npm run test -w apps/web -- lib/chat/markdown-math.test.tsx
 E2E_PORT=4827 npm run test:e2e -w apps/web -- math.spec.ts mermaid.spec.ts
 ```
 
+## Single sign-on validation
+
+`apps/web/lib/auth/oidc*.test.ts` run the whole sign-in against a mock OpenID
+Connect provider in the test process. They cover account creation, the first
+administrator, roles from groups, linking an existing account, a forged state,
+and an ID token signed with the wrong key. Run them after changing
+`lib/auth/oidc*.ts` or the user and session hooks in `lib/auth/server.ts`:
+
+```sh
+npm run test -w apps/web -- lib/auth
+```
+
+To click through the web sign-in, start the mock provider, which signs one user
+in without a login page, and point the server at it:
+
+```sh
+cd apps/web && npx tsx scripts/mock-oidc-provider.ts
+# In another terminal, from the repository root:
+OVERTCHAT_OIDC_ISSUER=http://127.0.0.1:47999 OVERTCHAT_OIDC_CLIENT_ID=overtchat-dev \
+  OVERTCHAT_OIDC_CLIENT_SECRET=dev OVERTCHAT_OIDC_ADMIN_GROUPS=admins npm run dev:web
+```
+
+`MOCK_OIDC_EMAIL`, `MOCK_OIDC_NAME`, and `MOCK_OIDC_GROUPS` choose the user.
+The account lands in the development database, so delete it afterwards if you
+want to repeat the first sign-in. The desktop and mobile apps refuse providers
+on plain HTTP, so test them against a real provider over HTTPS.
+
 ## CI browser and desktop smoke diagnostics
 
 Web E2E runs inside the official Playwright image

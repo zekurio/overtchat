@@ -40,6 +40,13 @@ services:
       REDIS_URL: redis://redis:6379
       # Update notices show the Compose steps instead of the management CLI.
       OVERTCHAT_UPDATE_METHOD: compose
+      # Single sign-on instead of the setup code and passwords. The redirect URI
+      # is https://chat.example.com/api/auth/callback/oidc. More options are in
+      # docs/deploy.md#single-sign-on.
+      # OVERTCHAT_OIDC_ISSUER: https://id.example.com/application/o/overtchat/
+      # OVERTCHAT_OIDC_CLIENT_ID: overtchat
+      # OVERTCHAT_OIDC_CLIENT_SECRET: ${OVERTCHAT_OIDC_CLIENT_SECRET}
+      # OVERTCHAT_OIDC_NAME: Authentik
     volumes:
       - overtchat-data:/app/data
     depends_on:

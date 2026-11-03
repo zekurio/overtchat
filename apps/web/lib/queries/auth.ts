@@ -1,4 +1,8 @@
-import { getChatQueueStore, type TwoFactorStatus } from "@overtchat/shared";
+import {
+  getChatQueueStore,
+  type SignInMethods,
+  type TwoFactorStatus,
+} from "@overtchat/shared";
 import { useCallback } from "react";
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
@@ -45,6 +49,22 @@ export function useRefreshTwoFactor() {
     [queryClient],
   );
 }
+
+/**
+ * How users sign in to this server. Servers from before single sign-on have no
+ * endpoint and offer passwords only.
+ */
+export const signInMethodsQuery = queryOptions({
+  queryKey: authKeys.signInMethods(),
+  queryFn: async (): Promise<SignInMethods> => {
+    const response = await fetch(apiUrl("/api/sign-in-methods"), {
+      cache: "no-store",
+    });
+    if (response.status === 404) return { password: true, sso: null };
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return (await response.json()) as SignInMethods;
+  },
+});
 
 /** Whether initial administrator setup is still available. */
 export async function fetchSetupRequired(): Promise<boolean> {

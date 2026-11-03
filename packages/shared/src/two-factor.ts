@@ -15,6 +15,12 @@ export interface TwoFactorStatus {
   enabled: boolean;
   /** The server requires this user, an administrator, to use two-factor. */
   required: boolean;
+  /**
+   * Whether this user can set up two-factor here. False for accounts that sign
+   * in only through single sign-on, where the provider handles it. Absent on
+   * servers from before single sign-on.
+   */
+  available?: boolean;
 }
 
 const MESSAGES: Record<string, string> = {

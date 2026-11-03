@@ -31,7 +31,15 @@ export function TwoFactorPrompt() {
   const [open, setOpen] = useState(() => !alreadyPrompted());
   const { data: status } = useQuery({ ...twoFactorQuery, enabled: open });
 
-  if (!open || !status || status.enabled || status.required) return null;
+  if (
+    !open ||
+    !status ||
+    status.enabled ||
+    status.required ||
+    status.available === false
+  ) {
+    return null;
+  }
 
   function close() {
     try {

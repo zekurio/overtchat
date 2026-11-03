@@ -1,6 +1,9 @@
 import type { TwoFactorStatus } from "@overtchat/shared";
 import { auth } from "@/lib/auth/server";
-import { twoFactorRequiredFor } from "@/lib/auth/two-factor";
+import {
+  twoFactorAvailableFor,
+  twoFactorRequiredFor,
+} from "@/lib/auth/two-factor";
 
 /** The signed-in user's two-factor state and whether this server requires it. */
 export async function GET(req: Request) {
@@ -9,5 +12,6 @@ export async function GET(req: Request) {
   return Response.json({
     enabled: session.user.twoFactorEnabled === true,
     required: twoFactorRequiredFor(session.user),
+    available: twoFactorAvailableFor(session.user),
   } satisfies TwoFactorStatus);
 }

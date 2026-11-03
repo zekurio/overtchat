@@ -65,3 +65,35 @@ export function changeUserRole(
     return { status: "updated", user: updated };
   });
 }
+
+/** Sets a role the identity provider assigns; the signed-in session stays. */
+export function setUserRole(userId: string, role: UserRole): void {
+  db.update(user)
+    .set({ role, updatedAt: new Date() })
+    .where(eq(user.id, userId))
+    .run();
+}
+
+/**
+ * Makes the user an administrator when the server has none, as for the first
+ * account created through single sign-on. One transaction, so concurrent
+ * first sign-ins cannot both become administrators.
+ */
+export function promoteFirstAdmin(userId: string): boolean {
+  return db.transaction((tx) => {
+    const administrator = tx
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.role, "admin"))
+      .limit(1)
+      .get();
+    if (administrator) return false;
+    const promoted = tx
+      .update(user)
+      .set({ role: "admin", updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning({ id: user.id })
+      .get();
+    return !!promoted;
+  }, { behavior: "immediate" });
+}

@@ -16,6 +16,7 @@ import {
   setServer,
 } from "./settings";
 import { applyBadge } from "./badge";
+import { signInWithSso } from "./sso";
 import { applyColorScheme, getMainWindow, getShellWindowState, isAppSender, restartUi, revealWindow } from "./window";
 import { checkDesktopUpdates, desktopUpdates, downloadDesktopUpdate, installDesktopUpdate, setUpdateOrigin } from "./updates";
 
@@ -114,6 +115,7 @@ export function registerIpc(): void {
   });
   handle(IPC.revealWindow, revealWindow);
   handle(IPC.systemIdle, () => powerMonitor.getSystemIdleTime());
+  handle(IPC.signInWithSso, signInWithSso);
   ipcMain.on(IPC.theme, (event, scheme: ColorScheme) => {
     if (!fromApp(event) || (scheme !== "light" && scheme !== "dark")) return;
     setColorScheme(scheme);

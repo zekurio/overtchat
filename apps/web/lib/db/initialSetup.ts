@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
+import { oidcConfig } from "@/lib/auth/oidc-config";
 import { db } from "./client";
 import { account, hostConnectors, initialSetup, user } from "./schema";
 
@@ -21,6 +22,8 @@ function deriveCode(nonce: string): string {
 }
 
 export function getSetupCode(): string | null {
+  // Single sign-on creates the first account, so there is no setup to do.
+  if (oidcConfig()) return null;
   return db.transaction((tx) => {
     const hasUsers = !!tx.select({ id: user.id }).from(user).limit(1).get();
     tx.insert(initialSetup)

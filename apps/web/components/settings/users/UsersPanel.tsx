@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { KeyRound, Plus, ShieldOff, Trash2 } from "lucide-react";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { authClient } from "@/lib/auth/client";
+import { signInMethodsQuery } from "@/lib/queries/auth";
 import {
   useInvalidateUsers,
   useSetUserRole,
@@ -38,6 +40,10 @@ type PendingRoleChange = {
 
 export function UsersPanel({ currentUserId }: { currentUserId: string }) {
   const { data: users = [] } = useUsers();
+  const { data: methods } = useQuery(signInMethodsQuery);
+  // Without password sign-in, accounts come only from single sign-on.
+  const passwords = methods?.password ?? true;
+  const sso = methods?.sso ?? null;
   const invalidateUsers = useInvalidateUsers();
   const setRoleMutation = useSetUserRole();
   const [addOpen, setAddOpen] = useState(false);
@@ -99,11 +105,17 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
     <SettingsPage>
       <SettingsPageHeader
         title="Users"
-        description="Manage who can sign in to this server."
+        description={
+          sso && !passwords
+            ? `People sign in with ${sso.name}, which creates their account the first time.`
+            : "Manage who can sign in to this server."
+        }
         action={
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <Plus /> Add user
-          </Button>
+          passwords ? (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus /> Add user
+            </Button>
+          ) : undefined
         }
       />
 
@@ -118,7 +130,9 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
               <th className="px-3 py-2.5 text-left font-medium">Name</th>
               <th className="px-3 py-2.5 text-left font-medium">Email</th>
               <th className="px-3 py-2.5 text-left font-medium">Role</th>
-              <th className="px-3 py-2.5 text-left font-medium">Two-factor</th>
+              {passwords && (
+                <th className="px-3 py-2.5 text-left font-medium">Two-factor</th>
+              )}
               <th className="px-3 py-2.5 text-left font-medium">Created</th>
               <th className="px-3 py-2.5 text-right font-medium">Actions</th>
             </tr>
@@ -131,7 +145,7 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
                 </td>
                 <td className="px-3 py-3 text-muted-foreground">{u.email}</td>
                 <td className="px-3 py-3">
-                  {u.id === currentUserId ? (
+                  {u.id === currentUserId || sso?.managesRoles ? (
                     <span className="text-muted-foreground">
                       {formatRole(u.role)}
                     </span>
@@ -159,9 +173,11 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
                     </Select>
                   )}
                 </td>
-                <td className="px-3 py-3 text-muted-foreground">
-                  {u.twoFactorEnabled ? "On" : "Off"}
-                </td>
+                {passwords && (
+                  <td className="px-3 py-3 text-muted-foreground">
+                    {u.twoFactorEnabled ? "On" : "Off"}
+                  </td>
+                )}
                 <td className="px-3 py-3 text-muted-foreground">
                   {new Date(u.createdAt).toLocaleDateString()}
                 </td>
@@ -172,15 +188,17 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
                     </span>
                   ) : (
                     <div className="flex justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setResetTarget(u)}
-                      >
-                        <KeyRound data-icon="inline-start" /> Reset password
-                      </Button>
-                      {u.twoFactorEnabled && (
+                      {passwords && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setResetTarget(u)}
+                        >
+                          <KeyRound data-icon="inline-start" /> Reset password
+                        </Button>
+                      )}
+                      {passwords && u.twoFactorEnabled && (
                         <Button
                           type="button"
                           variant="ghost"

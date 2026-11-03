@@ -12,7 +12,7 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, generateId, type FileUIPart, type UIMessage } from "ai";
 import {
   conversationFiles,
@@ -90,6 +90,7 @@ import {
   newChatComposerDraftScope,
 } from "@/lib/chat/composer-drafts";
 import { AdminOnboardingCard } from "@/components/AdminOnboardingCard";
+import { signInMethodsQuery } from "@/lib/queries/auth";
 import { useSidebar } from "@/components/sidebar-context";
 import { toast } from "@/components/ui/toast";
 import { ChatFilesPanel } from "./ChatFiles";
@@ -465,11 +466,15 @@ export function ChatArea({
   const isAdmin = session?.user.role === "admin";
   const [onboardingDismissed, setOnboardingDismissed] =
     useLocalStorage<boolean>("overtchat_onboarding_dismissed", false);
+  const onboardingCandidate =
+    isAdmin && !temporary && !onboardingDismissed && models?.length === 0;
+  // Servers that use single sign-on skip onboarding.
+  const { data: signInMethods } = useQuery({
+    ...signInMethodsQuery,
+    enabled: onboardingCandidate,
+  });
   const showOnboarding =
-    isAdmin &&
-    !temporary &&
-    !onboardingDismissed &&
-    models?.length === 0;
+    onboardingCandidate && signInMethods !== undefined && !signInMethods.sso;
 
   const requestBody = (
     action: ChatRequestAction,

@@ -21,6 +21,7 @@ export const IPC = {
   setBadge: "desktop:set-badge",
   revealWindow: "desktop:reveal-window",
   systemIdle: "desktop:system-idle",
+  signInWithSso: "desktop:sign-in-with-sso",
 } as const;
 
 export type ColorScheme = "light" | "dark";

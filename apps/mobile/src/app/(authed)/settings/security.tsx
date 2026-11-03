@@ -21,11 +21,26 @@ export default function Security() {
   const action = useAction();
   const twoFactor = useTwoFactorStatus();
   useUnsavedChanges(!!(current || password || confirm));
+  const email = (
+    <Section>
+      <Row title="Email" detail={session.data?.user.email} />
+    </Section>
+  );
+  // Accounts that sign in only through single sign-on have no password here.
+  if (twoFactor.data?.available === false) {
+    return (
+      <SettingsPage title="Security">
+        {email}
+        <Label muted>
+          You sign in with single sign-on. Manage your password and
+          two-factor authentication with your identity provider.
+        </Label>
+      </SettingsPage>
+    );
+  }
   return (
     <SettingsPage title="Security">
-      <Section>
-        <Row title="Email" detail={session.data?.user.email} />
-      </Section>
+      {email}
       <Section
         title="Change password"
         description="Changing your password signs you out of all other sessions."

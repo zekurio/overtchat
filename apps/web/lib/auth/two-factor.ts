@@ -10,6 +10,7 @@ import { TWO_FACTOR_CLIENT_HEADER } from "@overtchat/shared";
 import { z } from "zod";
 import { findPasswordAccount } from "@/lib/db/passwords";
 import { resetUserTwoFactor } from "@/lib/db/twoFactor";
+import { passwordLoginEnabled } from "./oidc-config";
 
 /**
  * Set by the management CLI when the server is reachable through OvertChat
@@ -22,8 +23,24 @@ export function adminTwoFactorRequired(): boolean {
   );
 }
 
+/**
+ * Two-factor here guards password sign-in. Accounts that only use single
+ * sign-on leave it to the identity provider.
+ */
+export function twoFactorAvailableFor(user: Record<string, unknown>): boolean {
+  return (
+    passwordLoginEnabled() &&
+    typeof user.id === "string" &&
+    !!findPasswordAccount(user.id)
+  );
+}
+
 export function twoFactorRequiredFor(user: Record<string, unknown>): boolean {
-  return user.role === "admin" && adminTwoFactorRequired();
+  return (
+    user.role === "admin" &&
+    adminTwoFactorRequired() &&
+    twoFactorAvailableFor(user)
+  );
 }
 
 /** Administrator recovery for lost authenticators, and the admin requirement. */

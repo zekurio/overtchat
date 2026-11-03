@@ -6,10 +6,16 @@ import {
 import {
   fetchSetupRequired,
   sessionQuery,
+  signInMethodsQuery,
   twoFactorQuery,
 } from "@/lib/queries/auth";
 import { withPages } from "@/spa/lazy";
 import { authRoute } from "@/spa/routes/root";
+
+const LoginForm = lazyRouteComponent(
+  () => import("@/components/auth/LoginForm"),
+  "LoginForm",
+);
 
 const RequiredTwoFactorSetup = lazyRouteComponent(
   () => import("@/components/auth/RequiredTwoFactorSetup"),
@@ -19,15 +25,24 @@ const RequiredTwoFactorSetup = lazyRouteComponent(
 export const loginRoute = createRoute({
   getParentRoute: () => authRoute,
   path: "/login",
+  // Single sign-on returns here with `?error=<code>` when it fails.
+  validateSearch: (search: Record<string, unknown>): { error?: string } =>
+    typeof search.error === "string" && search.error
+      ? { error: search.error }
+      : {},
   beforeLoad: async ({ context }) => {
     const session = await context.queryClient.fetchQuery(sessionQuery);
     if (session) throw redirect({ to: "/" });
     if (await fetchSetupRequired()) throw redirect({ to: "/signup" });
+    const signInMethods =
+      await context.queryClient.fetchQuery(signInMethodsQuery);
+    return { signInMethods };
   },
-  component: lazyRouteComponent(
-    () => import("@/components/auth/LoginForm"),
-    "LoginForm",
-  ),
+  component: withPages(function LoginPage() {
+    const { signInMethods } = loginRoute.useRouteContext();
+    const { error } = loginRoute.useSearch();
+    return <LoginForm methods={signInMethods} ssoError={error} />;
+  }, LoginForm),
 });
 
 export const signupRoute = createRoute({

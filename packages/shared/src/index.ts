@@ -22,6 +22,7 @@ export * from "./code-execution";
 export * from "./conversation-files";
 export * from "./openui";
 export * from "./errors";
+export * from "./sign-in";
 export * from "./two-factor";
 export * from "./chat-continuation";
 export * from "./chat-queue";
