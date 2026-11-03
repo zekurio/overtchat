@@ -8,7 +8,8 @@ npm run dev
 ```
 
 The full development stack supports Linux and macOS and requires Docker for
-Redis. On other platforms, use `npm run dev:web` to run the web app only.
+Redis, unless you use the [devenv shell](#devenv-shell). On other platforms,
+use `npm run dev:web` to run the web app only.
 
 The command starts the web app, an isolated Redis container, and a source Host
 Connector. Open [localhost:4717](http://localhost:4717). On an empty database,
@@ -18,6 +19,43 @@ same database and secret.
 
 Ctrl-C stops web and connector processes; `npm run dev:down` stops the retained
 Redis container. Disposable connector state lives in `.overtchat-dev/`, separate from production.
+
+## devenv shell
+
+[devenv](https://devenv.sh/) provides Node 22, the npm release pinned in
+`package.json`, Redis, and the SQLite CLI, with no Docker required. Enter it
+with `devenv shell`, or run `direnv allow` once to activate it whenever you
+`cd` into the checkout:
+
+```sh
+devenv shell
+npm ci
+npm run dev
+```
+
+Entering the shell starts a Redis server for this checkout and exports
+`REDIS_URL` for it. Redis listens on `127.0.0.1` at a free port the OS picks on
+first start, so it never collides with a system Redis. The port is saved in
+`.devenv/state/overtchat-redis/port` and reused after restarts and reboots. All
+shells of the checkout share that one server. If the saved port is taken by
+something else, Redis moves to a new port and prints a notice; reload the
+other open shells to pick it up.
+
+`npm run dev` uses a supplied `REDIS_URL` instead of starting the Docker
+container. `npm run dev:web` and the browser tests also read it from the
+shell, so the stream resumption tests run instead of being skipped. Run
+`overtchat-redis-stop` to stop Redis; `npm run dev:down` only manages the
+Docker container. `overtchat-redis start` restarts it and `overtchat-redis url`
+prints its URL.
+
+The web app's SQLite database is `apps/web/data/chat.db`. The web server applies
+migrations on startup. Use `sqlite3` or `npm run db:studio` to inspect it.
+
+`devenv test` enters the shell and checks the Node and npm versions and that
+Redis answers. When the `packageManager` pin in `package.json` changes, update
+the tarball hash in `nix/npm.nix` to the registry's `dist.integrity` for the
+new version. Put machine-specific settings in `devenv.local.nix`, which is
+gitignored.
 
 ## Environment and commands
 

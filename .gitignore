@@ -52,6 +52,12 @@ CLAUDE.md
 # generated local-development credentials and Host Connector runtime state
 /.overtchat-dev/
 
+# devenv shell state and per-developer overrides
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+.direnv/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

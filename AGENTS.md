@@ -31,6 +31,7 @@ runbook instead of copying its instructions.
 | `packages/agent-runtime` | Coding-agent provider adapters plus host runtime primitives |
 | `packages/shared` | Cross-client chat/tool/model contracts and generated web/native theme outputs |
 | `scripts/dev.mjs` | Root development-stack orchestration |
+| `devenv.nix`, `nix/` | Optional devenv shell: pinned Node/npm and a checkout-local Redis for development |
 | `speech/` | Bundled speech inference and packaging: native Apple TTS/STT and CPU/CUDA STT containers |
 | `sandbox/` | Optional code execution image: stateless Python runs, each as a fresh unprivileged user |
 | `compose.yml`, `searxng/`, `voice/` | Self-hosted application, search sidecar, and realtime voice orchestration |
@@ -51,8 +52,8 @@ Keep these boundaries strict:
 ## Commands
 
 Use Node 22 and npm 10.9.8. The npm version is repeated in `package.json`,
-`Dockerfile`, and CI workflows; update those pins and regenerate
-`package-lock.json` together.
+`Dockerfile`, and CI workflows, and `nix/npm.nix` holds its tarball hash;
+update those pins and regenerate `package-lock.json` together.
 
 Run commands from the repository root unless a scoped file says otherwise:
 

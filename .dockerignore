@@ -16,6 +16,8 @@ scripts
 **/test-results
 **/playwright-report
 **/coverage
+.devenv*
+.direnv
 *.db
 *.db-journal
 *.db-wal

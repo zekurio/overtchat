@@ -11,6 +11,7 @@ import {
   installedCapabilities,
   parseDevOptions,
   runDevelopment,
+  startsDevelopmentRedis,
 } from "./dev.mjs";
 
 for (const platform of ["linux", "darwin", "win32", "freebsd"]) {
@@ -56,6 +57,22 @@ test("development ports use explicit validated overrides", () => {
   assert.equal(developmentPort("4917", 4717), 4917);
   assert.throws(() => developmentPort("0", 4717), /Invalid development port/u);
   assert.throws(() => developmentPort("nope", 4717), /Invalid development port/u);
+});
+
+test("a supplied Redis URL replaces the isolated Redis container", () => {
+  assert.equal(startsDevelopmentRedis({ webOnly: false }, {}), true);
+  assert.equal(
+    startsDevelopmentRedis({ webOnly: false }, { REDIS_URL: " " }),
+    true,
+  );
+  assert.equal(
+    startsDevelopmentRedis(
+      { webOnly: false },
+      { REDIS_URL: "redis://127.0.0.1:40123" },
+    ),
+    false,
+  );
+  assert.equal(startsDevelopmentRedis({ webOnly: true }, {}), false);
 });
 
 test("development dependencies use the production image pins", async () => {

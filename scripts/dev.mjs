@@ -63,6 +63,12 @@ export function parseDevOptions(args) {
   };
 }
 
+// A supplied REDIS_URL, such as the devenv shell's, replaces the isolated
+// Docker Redis.
+export function startsDevelopmentRedis(options, environment = process.env) {
+  return !options.webOnly && !environment.REDIS_URL?.trim();
+}
+
 export function developmentPort(value, fallback) {
   const port = value === undefined ? fallback : Number(value);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
@@ -387,7 +393,7 @@ export async function runDevelopment(args = process.argv.slice(2)) {
     }
   }
 
-  if (!options.webOnly) {
+  if (startsDevelopmentRedis(options)) {
     console.log("Starting isolated development dependencies...");
     await runCommand("docker", [
       "compose",
@@ -419,8 +425,11 @@ export async function runDevelopment(args = process.argv.slice(2)) {
 
   const supervisor = new ProcessSupervisor();
   const stop = () => void supervisor.stop(0);
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  // npm forwards Ctrl-C to this process, which also receives it from the
+  // terminal. Keep handling repeats: without a listener, the second signal
+  // kills the supervisor and orphans the detached web and connector processes.
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
   try {
     const web = supervisor.add(
       "Web development server",
