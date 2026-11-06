@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { session, user } from "@/lib/db/schema";
 
@@ -64,6 +64,32 @@ export function changeUserRole(
     tx.delete(session).where(eq(session.userId, targetUserId)).run();
     return { status: "updated", user: updated };
   });
+}
+
+/**
+ * Takes the verified email the identity provider now reports. Another user
+ * with that address keeps it, so the provider can't merge two accounts.
+ */
+export function setProviderEmail(
+  userId: string,
+  email: string,
+): "updated" | "taken" | "not_found" {
+  const address = email.trim().toLowerCase();
+  return db.transaction((tx) => {
+    const other = tx
+      .select({ id: user.id })
+      .from(user)
+      .where(and(eq(user.email, address), ne(user.id, userId)))
+      .get();
+    if (other) return "taken";
+    const updated = tx
+      .update(user)
+      .set({ email: address, emailVerified: true, updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning({ id: user.id })
+      .get();
+    return updated ? "updated" : "not_found";
+  }, { behavior: "immediate" });
 }
 
 /** Sets a role the identity provider assigns; the signed-in session stays. */

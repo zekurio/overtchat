@@ -7,6 +7,8 @@ import type { SettingsUser } from "@overtchat/shared/admin-settings";
 import { getAuthClient } from "@/lib/auth/client";
 import { queryKeys } from "@/lib/queries/keys";
 import { useSettingsQuery, settingsRequest } from "@/lib/queries/settings";
+import { useSignInMethods } from "@/lib/queries/signInMethods";
+import { useTwoFactorStatus } from "@/lib/queries/twoFactor";
 import { AdminGate } from "@/components/settings/AdminGate";
 import {
   SettingsPage,
@@ -36,10 +38,18 @@ function UserScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const query = useSettingsQuery<{ users: SettingsUser[] }>("/users", true);
   const user = query.data?.users.find((u) => u.id === id);
+  const methods = useSignInMethods().data;
   return (
     <SettingsPage title={id === "new" ? "Add user" : (user?.name ?? "User")}>
       {id === "new" ? (
-        <CreateUser />
+        methods && !methods.password ? (
+          <Label muted>
+            People sign in with {methods.sso?.name ?? "single sign-on"}, which
+            creates their account the first time.
+          </Label>
+        ) : (
+          <CreateUser />
+        )
       ) : user ? (
         <ManageUser key={id} user={user} />
       ) : (
@@ -133,6 +143,13 @@ function CreateUser() {
 function ManageUser({ user }: { user: SettingsUser }) {
   const session = getAuthClient().useSession();
   const self = user.id === session.data?.user.id;
+  const methods = useSignInMethods().data;
+  const sso = methods?.sso ?? null;
+  // Resets ask for the acting administrator's password, which an account
+  // that signs in only through single sign-on doesn't have.
+  const ownTwoFactor = useTwoFactorStatus().data;
+  const passwords = methods?.password ?? true;
+  const canReset = passwords && ownTwoFactor?.available !== false;
   const [reset, setReset] = useState(false);
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
@@ -156,6 +173,12 @@ function ManageUser({ user }: { user: SettingsUser }) {
         />
         {self ? (
           <Row title="Role" value="Administrator · You" />
+        ) : sso?.managesRoles ? (
+          <Row
+            title="Role"
+            value={user.role === "admin" ? "Administrator" : "User"}
+            detail={`Set by groups in ${sso.name}`}
+          />
         ) : (
           <Choice
             title="Role"
@@ -196,15 +219,24 @@ function ManageUser({ user }: { user: SettingsUser }) {
         <Label muted>Change your own password in Security settings.</Label>
       ) : (
         <>
-          <Section>
-            <Row
-              title="Reset password"
-              icon="key-outline"
-              expanded={reset}
-              onPress={() => setReset(!reset)}
-            />
-          </Section>
-          {reset && (
+          {passwords && !canReset && (
+            <Label muted>
+              Resetting this user&apos;s password needs your own password, and
+              you sign in only with {sso?.name ?? "single sign-on"}. Ask an
+              administrator who has a password.
+            </Label>
+          )}
+          {canReset && (
+            <Section>
+              <Row
+                title="Reset password"
+                icon="key-outline"
+                expanded={reset}
+                onPress={() => setReset(!reset)}
+              />
+            </Section>
+          )}
+          {canReset && reset && (
             <>
               <Section
                 title="Reset password"
@@ -280,7 +312,9 @@ function ManageUser({ user }: { user: SettingsUser }) {
               onPress={() =>
                 Alert.alert(
                   "Delete user?",
-                  `${user.email} will no longer be able to sign in. Existing chats and projects are not deleted.`,
+                  sso
+                    ? `${user.email} will be signed out. If ${sso.name} still lets them in, their next sign-in creates a new, empty account, so remove their access there first. Existing chats and projects are not deleted.`
+                    : `${user.email} will no longer be able to sign in. Existing chats and projects are not deleted.`,
                   [
                     { text: "Cancel", style: "cancel" },
                     {

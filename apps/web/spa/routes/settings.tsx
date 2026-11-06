@@ -16,7 +16,7 @@ import {
 } from "@/lib/queries/mcpServers";
 import { adminModelConfigsQuery } from "@/lib/queries/modelConfigs";
 import { serverCapabilitiesQuery } from "@/lib/queries/serverCapabilities";
-import { signInMethodsQuery } from "@/lib/queries/auth";
+import { signInMethodsQuery, twoFactorQuery } from "@/lib/queries/auth";
 import { usersQuery } from "@/lib/queries/users";
 import { withPages } from "@/spa/lazy";
 import { SettingsPending } from "@/spa/pending";
@@ -120,7 +120,11 @@ export const accountSettingsRoute = createRoute({
     setup: optionalString(search.setup),
   }),
   loader: ({ context }) =>
-    context.queryClient.ensureQueryData(signInMethodsQuery),
+    Promise.all([
+      context.queryClient.ensureQueryData(signInMethodsQuery),
+      // Says whether this account has a password; older servers may not answer.
+      context.queryClient.prefetchQuery(twoFactorQuery),
+    ]),
   component: withPages(
     function AccountPage() {
       const { session } = accountSettingsRoute.useRouteContext();

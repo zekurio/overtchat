@@ -11,7 +11,7 @@ it("offers only single sign-on and skips initial setup", async () => {
   const { GET: methods } = await import("@/app/api/sign-in-methods/route");
   expect(await (await methods()).json()).toEqual({
     password: false,
-    sso: { provider: "oidc", name: "Test SSO", managesRoles: false },
+    sso: { provider: "oidc", name: "Test SSO", managesRoles: false, origin: baseURL },
   });
   const { GET: publicSetup } = await import("@/app/api/setup/route");
   expect(await (await publicSetup()).json()).toEqual({ required: false });
@@ -94,4 +94,57 @@ it("rejects an ID token the provider did not sign", async () => {
   expect(result.token).toBeNull();
   expect(result.location).toContain("/login?error=");
   expect(users()).toEqual([]);
+});
+
+it("keeps none of the provider's tokens", async () => {
+  await signIn(owner);
+  await signIn(owner);
+  expect(state.db.$client.prepare(
+    "SELECT access_token, refresh_token, id_token, access_token_expires_at FROM account WHERE provider_id = 'oidc'",
+  ).all()).toEqual([
+    { access_token: null, refresh_token: null, id_token: null, access_token_expires_at: null },
+  ]);
+});
+
+it("keeps extending a session while it is used, like a password sign-in", async () => {
+  const { token } = await signIn(owner);
+  const day = 86_400_000;
+  const now = Date.now();
+  // Signed in six and a half days ago and last extended then.
+  state.db.$client.prepare(
+    "UPDATE session SET created_at = ?, updated_at = ?, expires_at = ?",
+  ).run(now - 6.5 * day, now - 6.5 * day, now + 0.5 * day);
+  expect(await sessionUser(token)).toMatchObject({ email: "owner@example.com" });
+  const { expires_at } = state.db.$client
+    .prepare("SELECT expires_at FROM session")
+    .get() as { expires_at: number };
+  expect(expires_at).toBeGreaterThan(now + 6.9 * day);
+});
+
+it("leaves roles to the role route", async () => {
+  const { token } = await signIn(owner);
+  await signIn(member);
+  const { id } = state.db.$client
+    .prepare("SELECT id FROM user WHERE email = 'member@example.com'")
+    .get() as { id: string };
+  const response = await request("/admin/set-role", { userId: id, role: "admin" }, token!);
+  expect(response.status).toBe(404);
+  expect(users()).toContainEqual({ email: "member@example.com", name: "member", role: "user" });
+});
+
+it("refuses operator password recovery while password sign-in is off", async () => {
+  await signIn(owner);
+  const { POST } = await import("@/app/api/internal/management/password-reset/route");
+  const response = await POST(new Request(`${baseURL}/api/internal/management/password-reset`, {
+    method: "POST",
+    headers: { Authorization: "Bearer oidc-test-management-secret-1234567890" },
+    body: JSON.stringify({ email: "owner@example.com", newPassword: "test-password-123" }),
+  }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: expect.stringContaining("OVERTCHAT_OIDC_PASSWORD_LOGIN=true"),
+  });
+  expect(state.db.$client.prepare(
+    "SELECT count(*) AS n FROM account WHERE provider_id = 'credential'",
+  ).get()).toEqual({ n: 0 });
 });

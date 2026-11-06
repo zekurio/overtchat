@@ -301,6 +301,21 @@ export function installationNeedsAdoption(
   );
 }
 
+/**
+ * Setup writes the app's environment from its own settings, which have no
+ * single sign-on yet. Taking over an app that uses it would turn it off and
+ * lock out accounts without a password, so setup stops instead.
+ */
+export function assertNoSingleSignOn(existing: ExistingInstallation | null): void {
+  const variables = [...(existing?.environment ?? [])]
+    .filter(([key, value]) => key.startsWith("OVERTCHAT_OIDC_") && value.trim())
+    .map(([key]) => key);
+  if (variables.length === 0) return;
+  throw new Error(
+    `This OvertChat app uses single sign-on (${variables.join(", ")}), which overtchat setup can't keep yet. Keep managing it with Compose; see https://github.com/yoloyash/overtchat/blob/main/docs/deploy.md#single-sign-on`,
+  );
+}
+
 async function developmentReleaseManifest(
   sourceDirectory: string,
 ): Promise<ReleaseManifest> {
@@ -361,6 +376,7 @@ export async function setup(
 
   const paths = runtimePaths();
   const existing = await detectExistingInstallation(docker);
+  assertNoSingleSignOn(existing);
   const saved = await readInstallationConfig(paths);
   const adopting = installationNeedsAdoption(existing, paths.stackDirectory);
   const previousSecrets = await readInstallationSecrets(paths);

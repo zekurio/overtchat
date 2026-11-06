@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth/client";
-import { signInMethodsQuery } from "@/lib/queries/auth";
+import { signInMethodsQuery, twoFactorQuery } from "@/lib/queries/auth";
 import {
   SettingsActions,
   SettingsNotice,
@@ -25,6 +25,7 @@ export function AccountForm({
   startTwoFactorSetup?: boolean;
 }) {
   const { data: methods } = useQuery(signInMethodsQuery);
+  const { data: twoFactor } = useQuery(twoFactorQuery);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [pwError, setPwError] = useState("");
@@ -51,7 +52,10 @@ export function AccountForm({
     setNewPassword("");
   }
 
-  if (methods && !methods.password) {
+  // Accounts without a password here sign in only through single sign-on:
+  // every account when password sign-in is off, and some when it is on.
+  // `available` is absent on servers from before single sign-on.
+  if ((methods && !methods.password) || twoFactor?.available === false) {
     // Single sign-on accounts have no password here, and the provider
     // handles their second factor.
     return (
@@ -65,7 +69,7 @@ export function AccountForm({
           }
         />
         <SettingsNotice>
-          You sign in with {methods.sso?.name ?? "single sign-on"}. Manage
+          You sign in with {methods?.sso?.name ?? "single sign-on"}. Manage
           your password and two-factor authentication there.
         </SettingsNotice>
       </SettingsPage>

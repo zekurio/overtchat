@@ -13,6 +13,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   type SignInMethods,
+  ssoAddressMatches,
+  ssoAddressMessage,
+  ssoErrorMessage,
   TOTP_CODE_LENGTH,
   TWO_FACTOR_CLIENT_HEADER,
   twoFactorErrorMessage,
@@ -39,14 +42,33 @@ export default function LoginScreen() {
 
   async function onSso(provider: string) {
     if (submitting) return;
-    setSubmitting(true);
     setError("");
+    // The provider returns to the server's public address, where the
+    // sign-in's state cookie has to be.
+    const origin = methods.sso?.origin;
+    if (origin && serverUrl && !ssoAddressMatches(methods, serverUrl)) {
+      setError(ssoAddressMessage(origin));
+      return;
+    }
+    setSubmitting(true);
     try {
       // Opens the provider in an auth browser session; the server returns
-      // the session to the app's deep link.
-      const { error } = await authClient.signIn.social({ provider, callbackURL: "/" });
+      // the session to the app's deep link. Failures return to the app too,
+      // instead of leaving the user on the server's error page.
+      const { error } = await authClient.signIn.social({
+        provider,
+        callbackURL: "/",
+        errorCallbackURL: "/login",
+      });
       if (error) {
         setError(error.message ?? "Single sign-on failed");
+        return;
+      }
+      // The Expo client keeps the provider's error code to itself, and a
+      // closed browser looks the same, so a missing session is all there is.
+      const { data } = await authClient.getSession();
+      if (!data) {
+        setError(ssoErrorMessage(""));
         return;
       }
       await session.refetch();

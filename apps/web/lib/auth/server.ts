@@ -5,11 +5,11 @@ import { expo } from "@better-auth/expo";
 import { APIError } from "better-auth/api";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
-import { claimManagedHostConnector } from "@/lib/db/hostConnectors";
+import { claimManagedHostConnector, listHostConnectors } from "@/lib/db/hostConnectors";
 import { passwordRecovery } from "./password-recovery";
 import { initialSetup } from "./initial-setup";
 import { twoFactorRecovery } from "./two-factor";
-import { applySignInRole, isOidcCallback, oidcProvider, peekProviderRole } from "./oidc";
+import { applySignIn, isOidcCallback, oidcProvider, peekProviderRole } from "./oidc";
 import { OIDC_PROVIDER_ID, oidcConfig } from "./oidc-config";
 
 const extraTrustedOrigins =
@@ -19,12 +19,39 @@ const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:4717";
 const oidc = oidcConfig();
 const passwordLogin = !oidc || oidc.passwordLogin;
 
+/** OvertChat reads the provider's tokens only during the callback. */
+const NO_PROVIDER_TOKENS = {
+  accessToken: null,
+  refreshToken: null,
+  idToken: null,
+  accessTokenExpiresAt: null,
+  refreshTokenExpiresAt: null,
+};
+
+/**
+ * Stops a demoted user's agents without holding up their sign-in. The broker
+ * loads lazily, because every route loads this module.
+ */
+function stopAgentsOf(userId: string) {
+  if (listHostConnectors(userId).length === 0) return;
+  void import("@/lib/agents/connector/stopUserAgents")
+    .then(({ stopUserAgents }) => stopUserAgents(userId))
+    .catch((error: unknown) => {
+      console.error("[auth] Could not stop a demoted user's agents:", error);
+    });
+}
+
 export const auth = betterAuth({
   baseURL,
   database: drizzleAdapter(db, { provider: "sqlite", schema }),
   trustedOrigins: ["overtchat://", ...extraTrustedOrigins],
-  // The stock endpoint skips password confirmation and leaves sessions active.
-  disabledPaths: ["/admin/set-user-password"],
+  disabledPaths: [
+    // The stock endpoint skips password confirmation and leaves sessions active.
+    "/admin/set-user-password",
+    // Roles change through /api/users/:id/role, which keeps an administrator,
+    // stops a demoted user's agents, and defers to the provider's groups.
+    "/admin/set-role",
+  ],
   rateLimit: {
     customRules: {
       "/admin/reset-user-password": { window: 60, max: 5 },
@@ -104,14 +131,31 @@ export const auth = betterAuth({
           const account = (await adapter.findAccounts(user.id)).find(
             (a) => a.providerId === OIDC_PROVIDER_ID,
           );
-          const role = applySignInRole(
+          const role = applySignIn(
             oidc,
             user as typeof user & { role?: string | null },
             account?.accountId,
           );
           if (role === "admin") claimManagedHostConnector(user.id);
+          if (role === "user") stopAgentsOf(user.id);
         },
       },
     },
+    ...(oidc && {
+      account: {
+        create: {
+          before: async (data) => {
+            if (data.providerId !== OIDC_PROVIDER_ID) return;
+            return { data: { ...data, ...NO_PROVIDER_TOKENS } };
+          },
+        },
+        update: {
+          before: async (data) => {
+            if (!("accessToken" in data || "refreshToken" in data || "idToken" in data)) return;
+            return { data: { ...data, ...NO_PROVIDER_TOKENS } };
+          },
+        },
+      },
+    }),
   },
 });

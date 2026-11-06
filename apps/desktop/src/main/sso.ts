@@ -71,7 +71,8 @@ async function run(provider: string): Promise<SsoResult> {
       if (!win.isDestroyed()) win.close();
     };
     // The callback's redirect back to the server's app ends the sign-in. Its
-    // response headers, with the session token, were read before this.
+    // response headers, with the session token, were read before this. Only
+    // those two pages count, since a provider can share the server's origin.
     const onRedirect = (event: Electron.Event, target: string) => {
       let next: URL;
       try {
@@ -79,7 +80,9 @@ async function run(provider: string): Promise<SsoResult> {
       } catch {
         return;
       }
-      if (next.origin !== origin || next.pathname.startsWith("/api/")) return;
+      if (next.origin !== origin || (next.pathname !== DONE_PATH && next.pathname !== ERROR_PATH)) {
+        return;
+      }
       event.preventDefault();
       const error = next.pathname === ERROR_PATH ? next.searchParams.get("error") : null;
       const signedIn = !error && getSessionToken() !== null && getSessionToken() !== tokenBefore;

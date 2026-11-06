@@ -36,8 +36,13 @@ export function passwordRecovery() {
             });
           }
           const credential = findPasswordAccount(actor.user.id);
+          if (!credential?.password) {
+            throw new APIError("BAD_REQUEST", {
+              message:
+                "Resetting a password needs your own password, and your account signs in only through single sign-on. Ask an administrator who has a password.",
+            });
+          }
           if (
-            !credential?.password ||
             !(await ctx.context.password.verify({
               hash: credential.password,
               password: ctx.body.currentPassword,

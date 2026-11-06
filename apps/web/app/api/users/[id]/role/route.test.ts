@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   changeUserRole: vi.fn(),
   daemonRequest: vi.fn(),
   listConnectors: vi.fn(),
+  oidcConfig: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -19,6 +20,9 @@ vi.mock("@/lib/agents/connector/broker", () => ({
 }));
 vi.mock("@/lib/db/hostConnectors", () => ({
   listHostConnectors: mocks.listConnectors,
+}));
+vi.mock("@/lib/auth/oidc-config", () => ({
+  oidcConfig: mocks.oidcConfig,
 }));
 
 import { PATCH } from "./route";
@@ -49,6 +53,7 @@ describe("user role route", () => {
       },
     });
     mocks.listConnectors.mockReturnValue([{ id: "connector" }]);
+    mocks.oidcConfig.mockReturnValue(null);
   });
 
   it("requires an administrator", async () => {
@@ -84,5 +89,23 @@ describe("user role route", () => {
       error: "At least one administrator is required.",
     });
     expect(mocks.daemonRequest).not.toHaveBeenCalled();
+  });
+
+  it("refuses changes when the identity provider's groups set roles", async () => {
+    mocks.oidcConfig.mockReturnValue({ name: "Authentik", adminGroups: ["admins"] });
+
+    const response = await PATCH(request("user"), context);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "Roles come from groups in Authentik on this server.",
+    });
+    expect(mocks.changeUserRole).not.toHaveBeenCalled();
+  });
+
+  it("allows changes when single sign-on leaves roles to OvertChat", async () => {
+    mocks.oidcConfig.mockReturnValue({ name: "Authentik", adminGroups: [] });
+
+    expect((await PATCH(request("user"), context)).status).toBe(200);
   });
 });

@@ -12,6 +12,7 @@ import {
   useRefreshOnFocus,
 } from "@/components/settings/SettingsUI";
 import { useSettingsQuery } from "@/lib/queries/settings";
+import { useSignInMethods } from "@/lib/queries/signInMethods";
 export default function Users() {
   return (
     <AdminGate>
@@ -22,6 +23,10 @@ export default function Users() {
 function UserList() {
   const query = useSettingsQuery<{ users: SettingsUser[] }>("/users", true);
   useRefreshOnFocus(query.refetch);
+  const methods = useSignInMethods().data;
+  // Without password sign-in, accounts come only from single sign-on.
+  const passwords = methods?.password ?? true;
+  const sso = methods?.sso ?? null;
   const [search, setSearch] = useState("");
   const users =
     query.data?.users.filter((user) =>
@@ -30,11 +35,15 @@ function UserList() {
   return (
     <SettingsPage
       title="Users"
-      action={{
-        label: "Add user",
-        icon: "add",
-        onPress: () => router.push("/settings/users/new"),
-      }}
+      action={
+        passwords
+          ? {
+              label: "Add user",
+              icon: "add",
+              onPress: () => router.push("/settings/users/new"),
+            }
+          : undefined
+      }
     >
       <QueryState query={query} />
       {query.data && (
@@ -46,7 +55,11 @@ function UserList() {
       )}
       <Section
         title="People"
-        description="Manage who can sign in to this server."
+        description={
+          sso && !passwords
+            ? `People sign in with ${sso.name}, which creates their account the first time.`
+            : "Manage who can sign in to this server."
+        }
       >
         {users.map((user) => (
           <Row

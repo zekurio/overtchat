@@ -338,6 +338,10 @@ mobile sessions. Sign in again with the replacement password. Chats, settings,
 and administrator/user roles are preserved. Other accounts remain signed in.
 Recovery does not enable email delivery or provide public self-service reset links.
 
+Servers that use [single sign-on](#single-sign-on) aren't managed by the CLI,
+so use the manual request below. It needs password sign-in on, and it can give
+an account the provider created its first password.
+
 ### Manual installations without the management CLI
 
 The running app also accepts recovery at
@@ -379,7 +383,11 @@ try:
     with opener.open(request, timeout=15) as response:
         result = json.load(response)
 except urllib.error.HTTPError as error:
-    raise SystemExit(f"Recovery failed (HTTP {error.code}). Check the email, secret, and app version.")
+    try:
+        detail = json.load(error).get("error")
+    except Exception:
+        detail = None
+    raise SystemExit(detail or f"Recovery failed (HTTP {error.code}). Check the email, secret, and app version.")
 except urllib.error.URLError:
     raise SystemExit("Could not reach the local app.")
 if result.get("status") is not True:
@@ -454,27 +462,58 @@ Roles come from one of two places:
 
 - With `OVERTCHAT_OIDC_ADMIN_GROUPS`, the provider decides. Every sign-in
   makes members of those groups administrators and everyone else a user, so
-  removing someone from the group demotes them the next time they sign in.
-  **Settings → Users** shows roles but doesn't change them. Many providers only
-  send groups when asked, so add the provider's groups scope, often `groups`,
-  to `OVERTCHAT_OIDC_SCOPES`. OvertChat reads groups from the ID token and the
-  userinfo response.
+  removing someone from the group demotes them the next time they sign in,
+  and stops their coding agents. **Settings → Users** shows roles but doesn't
+  change them. Many providers only send groups when asked, so add the
+  provider's groups scope, often `groups`, to `OVERTCHAT_OIDC_SCOPES`.
+  OvertChat reads groups from the ID token and the userinfo response. When
+  userinfo fails and the ID token has no groups, the sign-in stops instead of
+  taking administrator access away. When the provider sends no groups claim
+  at all, users sign in without administrator access and the log says so.
 - Without it, the first account becomes the administrator and later accounts
   are users. Administrators change roles in **Settings → Users**.
 
 Anyone the provider lets sign in to this client gets an account, so limit
 access to the application in the provider.
 
+Sessions from the provider work like password sign-ins. Each one lasts 7 days
+and renews while it is used, so people stay signed in. Changes in the provider
+apply at the next sign-in: someone you remove there can't sign in again, and
+changed groups set the role then. To cut off someone who is signed in, remove
+their access in the provider, then delete them in **Settings → Users**, which
+signs them out. Deleting them alone isn't enough, because their next sign-in
+creates a new, empty account.
+
 An account that already exists, with a password from before, joins the
 provider's sign-in when the provider reports the same email as verified. The
 account keeps its chats and settings. If the provider doesn't verify the email,
-sign-in stops with a message instead of creating a second account.
+sign-in stops with a message instead of creating a second account. When the
+provider later reports a different verified email for a user, OvertChat takes
+it, unless another account has that address. Names and pictures come from the
+first sign-in, and users can change them. OvertChat doesn't keep the
+provider's access, refresh, or ID tokens.
 
 With password sign-in off, OvertChat has no passwords or two-factor of its own:
 **Settings → Security** points users to the provider, administrators can't add
 users or reset passwords, and `OVERTCHAT_REQUIRE_ADMIN_TWO_FACTOR` has no
 effect. Set up two-factor in the provider. Signing out of OvertChat leaves the
-provider's session alone.
+provider's session alone. With password sign-in on, accounts the provider
+created still have no password. Their **Settings → Security** points to the
+provider, and an administrator without a password can't reset other users'
+passwords or two-factor, because both ask for the administrator's own.
+
+If the provider is down, or no administrator can sign in, set
+`OVERTCHAT_OIDC_PASSWORD_LOGIN=true`, restart the app, and send the
+[management password reset](#manual-installations-without-the-management-cli)
+for an administrator's email. It gives an account the provider created a
+password. While password sign-in is off, the request refuses with a message.
+When the provider's groups set roles, signing in with a password keeps the
+role the account last had.
+
+The provider returns to `BETTER_AUTH_URL`, so single sign-on starts there too.
+The web app opened at another address, such as a LAN IP, moves to
+`BETTER_AUTH_URL` when you choose the provider. The desktop and mobile apps
+have to be connected to that address and say so otherwise.
 
 The web app, the desktop app, and the mobile app all show the provider's
 button. The desktop app opens the provider in its own window; the mobile app
@@ -482,9 +521,10 @@ uses the system's sign-in browser. Both need a provider served over HTTPS.
 Older apps show the password form only, so update them before you turn off
 password sign-in.
 
-The management CLI doesn't configure single sign-on yet, and `overtchat
-setup` rewrites the app's `.env`. Use it with source Compose, Minimal Compose,
-or another deployment where you control the app's environment.
+The management CLI doesn't configure single sign-on yet. It writes the app's
+`.env` from its own settings, so `overtchat setup` stops when the running app
+uses single sign-on instead of turning it off. Use it with source Compose,
+Minimal Compose, or another deployment where you control the app's environment.
 
 ## Choose how to access OvertChat
 

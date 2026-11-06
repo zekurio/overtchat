@@ -47,6 +47,13 @@ export default defineConfig({
       OVERTCHAT_MANAGEMENT_SECRET: "e2e-management-secret-1234567890123456",
       SANDBOX_URL: e2eSandboxUrl,
       SANDBOX_TOKEN: e2eSandboxToken,
+      // The suites create accounts with the setup code and passwords, so single
+      // sign-on from .env.local or the shell stays off.
+      ...Object.fromEntries(
+        Object.keys(process.env)
+          .filter((key) => key.startsWith("OVERTCHAT_OIDC_"))
+          .map((key) => [key, ""]),
+      ),
       ...(redisUrl ? { REDIS_URL: redisUrl } : {}),
     },
   },

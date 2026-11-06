@@ -25,11 +25,16 @@ const RequiredTwoFactorSetup = lazyRouteComponent(
 export const loginRoute = createRoute({
   getParentRoute: () => authRoute,
   path: "/login",
-  // Single sign-on returns here with `?error=<code>` when it fails.
-  validateSearch: (search: Record<string, unknown>): { error?: string } =>
-    typeof search.error === "string" && search.error
+  // Single sign-on returns here with `?error=<code>` when it fails, and
+  // another address of this server sends `?sso=start` to begin it here.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { error?: string; sso?: "start" } => ({
+    ...(typeof search.error === "string" && search.error
       ? { error: search.error }
-      : {},
+      : {}),
+    ...(search.sso === "start" ? { sso: "start" as const } : {}),
+  }),
   beforeLoad: async ({ context }) => {
     const session = await context.queryClient.fetchQuery(sessionQuery);
     if (session) throw redirect({ to: "/" });
@@ -40,8 +45,14 @@ export const loginRoute = createRoute({
   },
   component: withPages(function LoginPage() {
     const { signInMethods } = loginRoute.useRouteContext();
-    const { error } = loginRoute.useSearch();
-    return <LoginForm methods={signInMethods} ssoError={error} />;
+    const { error, sso } = loginRoute.useSearch();
+    return (
+      <LoginForm
+        methods={signInMethods}
+        ssoError={error}
+        startSso={sso === "start" && !error}
+      />
+    );
   }, LoginForm),
 });
 

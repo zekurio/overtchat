@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { authClient } from "@/lib/auth/client";
-import { signInMethodsQuery } from "@/lib/queries/auth";
+import { signInMethodsQuery, twoFactorQuery } from "@/lib/queries/auth";
 import {
   useInvalidateUsers,
   useSetUserRole,
@@ -44,6 +44,10 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
   // Without password sign-in, accounts come only from single sign-on.
   const passwords = methods?.password ?? true;
   const sso = methods?.sso ?? null;
+  // Resets ask for the acting administrator's password, which an account
+  // that signs in only through single sign-on doesn't have.
+  const { data: ownTwoFactor } = useQuery(twoFactorQuery);
+  const canReset = passwords && ownTwoFactor?.available !== false;
   const invalidateUsers = useInvalidateUsers();
   const setRoleMutation = useSetUserRole();
   const [addOpen, setAddOpen] = useState(false);
@@ -119,6 +123,14 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
         }
       />
 
+      {passwords && !canReset && (
+        <SettingsNotice>
+          Resetting another user&apos;s password or two-factor needs your own
+          password, and you sign in only with {sso?.name ?? "single sign-on"}.
+          Ask an administrator who has a password.
+        </SettingsNotice>
+      )}
+
       <SettingsSection
         title="People"
         description={`${users.length} user${users.length === 1 ? "" : "s"} configured.`}
@@ -188,7 +200,7 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
                     </span>
                   ) : (
                     <div className="flex justify-end gap-1">
-                      {passwords && (
+                      {canReset && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -198,7 +210,7 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
                           <KeyRound data-icon="inline-start" /> Reset password
                         </Button>
                       )}
-                      {passwords && u.twoFactorEnabled && (
+                      {canReset && u.twoFactorEnabled && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -355,8 +367,10 @@ export function UsersPanel({ currentUserId }: { currentUserId: string }) {
               <span className="font-medium text-foreground">
                 {pendingDelete?.email}
               </span>{" "}
-              will no longer be able to sign in. Existing chats and projects are
-              not deleted.
+              {sso
+                ? `will be signed out. If ${sso.name} still lets them in, their next sign-in creates a new, empty account, so remove their access there first.`
+                : "will no longer be able to sign in."}{" "}
+              Existing chats and projects are not deleted.
             </AlertDialog.Description>
             {deleteError && (
               <SettingsNotice tone="error" className="mt-3 text-xs">

@@ -12,6 +12,7 @@ export function GET() {
             provider: OIDC_PROVIDER_ID,
             name: oidc.name,
             managesRoles: oidc.adminGroups.length > 0,
+            origin: new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:4717").origin,
           }
         : null,
     } satisfies SignInMethods,

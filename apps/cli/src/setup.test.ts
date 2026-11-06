@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { installationNeedsAdoption, setup, syncCapabilities } from "./setup.js";
+import { assertNoSingleSignOn, installationNeedsAdoption, setup, syncCapabilities } from "./setup.js";
 import type { ExistingInstallation } from "./types.js";
 import type { InstallationConfig } from "./types.js";
 
@@ -109,6 +109,18 @@ describe("installation adoption", () => {
         "/home/yash/.local/share/overtchat",
       ),
     ).toBe(true);
+  });
+
+  it("stops before taking over an app that uses single sign-on", () => {
+    expect(() => assertNoSingleSignOn(null)).not.toThrow();
+    const installation = existingInstallation("/home/yash/dev/overtchat");
+    installation.environment.set("OVERTCHAT_OIDC_NAME", "");
+    expect(() => assertNoSingleSignOn(installation)).not.toThrow();
+    installation.environment.set("OVERTCHAT_OIDC_ISSUER", "https://id.example.com");
+    installation.environment.set("OVERTCHAT_OIDC_CLIENT_ID", "overtchat");
+    expect(() => assertNoSingleSignOn(installation)).toThrow(
+      "single sign-on (OVERTCHAT_OIDC_ISSUER, OVERTCHAT_OIDC_CLIENT_ID)",
+    );
   });
 });
 

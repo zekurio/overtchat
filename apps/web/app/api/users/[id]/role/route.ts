@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth/server";
-import { hostConnectorBroker } from "@/lib/agents/connector/broker";
-import { listHostConnectors } from "@/lib/db/hostConnectors";
+import { oidcConfig } from "@/lib/auth/oidc-config";
+import { stopUserAgents } from "@/lib/agents/connector/stopUserAgents";
 import { changeUserRole } from "@/lib/db/users";
 
 const bodySchema = z.object({
@@ -16,6 +16,15 @@ export async function PATCH(
   if (!session) return new Response("Unauthorized", { status: 401 });
   if (session.user.role !== "admin") {
     return new Response("Forbidden", { status: 403 });
+  }
+  // The provider's groups set roles at every sign-in, so a change here would
+  // only last until the user's next sign-in.
+  const oidc = oidcConfig();
+  if (oidc && oidc.adminGroups.length > 0) {
+    return Response.json(
+      { error: `Roles come from groups in ${oidc.name} on this server.` },
+      { status: 409 },
+    );
   }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -42,11 +51,7 @@ export async function PATCH(
   }
 
   if (result.status === "updated" && parsed.data.role === "user") {
-    await Promise.allSettled(
-      listHostConnectors(id).map((connector) =>
-        hostConnectorBroker.request(connector.id, { type: "stop_all" }),
-      ),
-    );
+    await stopUserAgents(id);
   }
   return Response.json({ user: result.user });
 }

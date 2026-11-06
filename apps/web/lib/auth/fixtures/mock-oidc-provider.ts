@@ -25,6 +25,7 @@ export async function startMockOidcProvider(
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const forger = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey;
   let forgeNext = false;
+  let failUserinfo = false;
   const jwk = { ...publicKey.export({ format: "jwk" }), kid: "test", alg: "RS256", use: "sig" };
   const codes = new Map<string, { profile: MockProfile; nonce?: string; challenge?: string }>();
   const accessTokens = new Map<string, MockProfile>();
@@ -85,6 +86,10 @@ export async function startMockOidcProvider(
       });
     }
     if (url.pathname === "/userinfo") {
+      if (failUserinfo) {
+        failUserinfo = false;
+        return json(503, { error: "temporarily_unavailable" });
+      }
       const token = req.headers.authorization?.replace(/^Bearer /u, "") ?? "";
       const profile = accessTokens.get(token);
       if (!profile) return json(401, { error: "invalid_token" });
@@ -112,6 +117,10 @@ export async function startMockOidcProvider(
     /** Signs the next ID token with a key the provider does not publish. */
     forgeNextIdToken() {
       forgeNext = true;
+    },
+    /** Answers the next userinfo request with an error. */
+    failNextUserinfo() {
+      failUserinfo = true;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

@@ -1,16 +1,19 @@
 "use client";
 
 import {
+  ssoAddressMatches,
+  ssoAddressMessage,
   ssoErrorMessage,
   TWO_FACTOR_CLIENT_HEADER,
   type SignInMethods,
 } from "@overtchat/shared";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { getApiOrigin } from "@/lib/api-url";
 import { authClient } from "@/lib/auth/client";
 import { desktopBridge } from "@/lib/desktop";
 import { useResetAuthState } from "@/lib/queries/auth";
@@ -19,10 +22,13 @@ import { TwoFactorCodeForm } from "./TwoFactorCodeForm";
 export function LoginForm({
   methods,
   ssoError,
+  startSso = false,
 }: {
   methods: SignInMethods;
   /** The `error` code single sign-on returned with. */
   ssoError?: string;
+  /** Starts single sign-on right away, after moving to the server's public address. */
+  startSso?: boolean;
 }) {
   const navigate = useNavigate();
   const resetAuthState = useResetAuthState();
@@ -41,10 +47,17 @@ export function LoginForm({
   }
 
   async function signInWithSso(provider: string) {
-    setSubmitting(true);
     setError("");
+    const origin = methods.sso?.origin;
     const desktop = desktopBridge();
     if (desktop) {
+      // The provider returns to the server's public address, so the desktop
+      // app has to be connected to that address.
+      if (origin && !ssoAddressMatches(methods, getApiOrigin())) {
+        setError(ssoAddressMessage(origin));
+        return;
+      }
+      setSubmitting(true);
       // The bundled UI is on another origin than the server, so the desktop
       // app runs the provider's pages in its own window.
       if (!desktop.signInWithSso) {
@@ -61,6 +74,18 @@ export function LoginForm({
       setSubmitting(false);
       return;
     }
+    // The sign-in's state cookie has to be on the address the provider
+    // returns to. Move there once; a second mismatch means a misconfigured
+    // BETTER_AUTH_URL, and moving again would loop.
+    if (origin && !ssoAddressMatches(methods, window.location.origin)) {
+      if (startSso) {
+        setError(ssoAddressMessage(origin));
+        return;
+      }
+      window.location.assign(new URL("/login?sso=start", origin).toString());
+      return;
+    }
+    setSubmitting(true);
     // Leaves the app for the provider, which returns to `callbackURL`.
     const { error } = await authClient.signIn.social({
       provider,
@@ -72,6 +97,15 @@ export function LoginForm({
       setSubmitting(false);
     }
   }
+
+  // Arriving from another address of this server with `?sso=start`.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!startSso || started.current || !methods.sso) return;
+    started.current = true;
+    void signInWithSso(methods.sso.provider);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on arrival
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

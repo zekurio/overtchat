@@ -184,7 +184,8 @@ E2E_PORT=4827 npm run test:e2e -w apps/web -- math.spec.ts mermaid.spec.ts
 `apps/web/lib/auth/oidc*.test.ts` run the whole sign-in against a mock OpenID
 Connect provider in the test process. They cover account creation, the first
 administrator, roles from groups, linking an existing account, a forged state,
-and an ID token signed with the wrong key. Run them after changing
+an ID token signed with the wrong key, a failed userinfo request, email
+changes, stored tokens, and operator password recovery. Run them after changing
 `lib/auth/oidc*.ts` or the user and session hooks in `lib/auth/server.ts`:
 
 ```sh
@@ -195,7 +196,7 @@ To click through the web sign-in, start the mock provider, which signs one user
 in without a login page, and point the server at it:
 
 ```sh
-cd apps/web && npx tsx scripts/mock-oidc-provider.ts
+npm run oidc:mock -w apps/web
 # In another terminal, from the repository root:
 OVERTCHAT_OIDC_ISSUER=http://127.0.0.1:47999 OVERTCHAT_OIDC_CLIENT_ID=overtchat-dev \
   OVERTCHAT_OIDC_CLIENT_SECRET=dev OVERTCHAT_OIDC_ADMIN_GROUPS=admins npm run dev:web

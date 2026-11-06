@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { account, session, user } from "@/lib/db/schema";
@@ -73,6 +74,13 @@ export function resetUserPassword(
   userId: string,
   passwordHash: string,
   actor?: ResetAuthorization,
+  options: {
+    /**
+     * Gives an account without a password one, as operator recovery does for
+     * accounts that only signed in through single sign-on.
+     */
+    addIfMissing?: boolean;
+  } = {},
 ): "updated" | "not_found" | "no_password" | "unauthorized" {
   return db.transaction((tx) => {
     if (actor && !resetActorAuthorized(tx, actor)) return "unauthorized";
@@ -88,11 +96,26 @@ export function resetUserPassword(
         and(eq(account.userId, userId), eq(account.providerId, "credential")),
       )
       .get();
-    if (!credential) return "no_password";
-    tx.update(account)
-      .set({ password: passwordHash, updatedAt: new Date() })
-      .where(eq(account.id, credential.id))
-      .run();
+    if (!credential && !options.addIfMissing) return "no_password";
+    const now = new Date();
+    if (credential) {
+      tx.update(account)
+        .set({ password: passwordHash, updatedAt: now })
+        .where(eq(account.id, credential.id))
+        .run();
+    } else {
+      tx.insert(account)
+        .values({
+          id: randomUUID(),
+          userId,
+          accountId: userId,
+          providerId: "credential",
+          password: passwordHash,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
     tx.delete(session).where(eq(session.userId, userId)).run();
     return "updated";
   });

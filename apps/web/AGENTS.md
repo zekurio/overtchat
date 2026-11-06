@@ -67,9 +67,12 @@ See [initial setup](../../docs/deploy.md#install).
 (`lib/auth/oidc-config.ts`, `lib/auth/oidc.ts`). Its callback is the only path
 that creates accounts then, and the setup code stays closed. Roles come from
 the provider's groups or, without admin groups, the first account becomes the
-administrator in one transaction. Password sign-in and admin-created users are
-off unless `OVERTCHAT_OIDC_PASSWORD_LOGIN` is set; clients read the available
-methods from `/api/sign-in-methods`. See
+administrator in one transaction. With admin groups, the role route refuses
+changes, and Better Auth's `/admin/set-role` stays disabled in every mode.
+The provider's tokens aren't stored. Password sign-in and
+admin-created users are off unless `OVERTCHAT_OIDC_PASSWORD_LOGIN` is set;
+clients read the available methods from `/api/sign-in-methods`, and whether an
+account has a password from `available` in `/api/two-factor`. See
 [single sign-on](../../docs/deploy.md#single-sign-on).
 
 ## Chat and persistence

@@ -1,11 +1,22 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth/server";
+import { oidcConfig, passwordLoginEnabled } from "@/lib/auth/oidc-config";
 import { findUserByEmail, resetUserPassword } from "@/lib/db/passwords";
 import { managementRequestAuthorized } from "@/lib/management/auth";
 
 export async function POST(request: Request) {
   if (!managementRequestAuthorized(request)) {
     return new Response("Unauthorized", { status: 401 });
+  }
+  // A password would be unusable, so recovery says what to change instead.
+  if (!passwordLoginEnabled()) {
+    return Response.json(
+      {
+        error:
+          "Password sign-in is off on this server. Set OVERTCHAT_OIDC_PASSWORD_LOGIN=true, restart the app, and try again.",
+      },
+      { status: 409 },
+    );
   }
   const parsed = z
     .object({
@@ -36,7 +47,11 @@ export async function POST(request: Request) {
   if (!target)
     return Response.json({ error: "User not found." }, { status: 404 });
   const hash = await context.password.hash(parsed.data.newPassword);
-  const result = resetUserPassword(target.id, hash);
+  // With single sign-on, an account may have no password yet. The operator can
+  // give it one, so an administrator can sign in while the provider is down.
+  const result = resetUserPassword(target.id, hash, undefined, {
+    addIfMissing: oidcConfig() !== null,
+  });
   if (result === "not_found")
     return Response.json({ error: "User not found." }, { status: 404 });
   if (result !== "updated") {
